@@ -1,10 +1,10 @@
 # smppHttpRequest
 
+# Os arquivos client.service e client.sh se encontram no pacote client, dentro do projeto.
+
 Salvar o client.service no /etc/systemd/system
 
 Salvar o client.sh no /usr/bin e habilidar chmod a+x client.sh
-
-Os arquivos client.service e client.sh se encontram no pacote client, dentro do projeto.
 
 Para iniciar o serviço, no terminal digite:
 
