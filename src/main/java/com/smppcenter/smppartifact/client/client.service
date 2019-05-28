@@ -1,0 +1,11 @@
+[Unit]
+Description=Client demo service
+
+[Service]
+Type=simple
+User=fenrir
+ExecStart=/opt/ambiente/Projetos/smppartifact/target/smppartifact-0.0.1-SNAPSHOT.jar
+
+[Install]
+WantedBy=multi-user.target
+
