@@ -34,8 +34,7 @@ public class SmppService {
 	public static final Logger log = LoggerFactory.getLogger(Client.class);
 	
 	public <T> void start(String host, int porta, String systemId, String password, String origem, String destino,
-			String msg, String dataCode) throws SmppInvalidArgumentException, SmppBindException, SmppTimeoutException,
-			SmppChannelException, UnrecoverablePduException, InterruptedException {
+			String msg, String dataCode) throws Exception {
 		
 		SmppSessionConfiguration sessionCfg = new SmppSessionConfiguration();
 

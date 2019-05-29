@@ -1,5 +1,6 @@
 package com.smppcenter.smppartifact.client;
 
+import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,7 +41,7 @@ import com.smppcenter.smppartifact.util.RebindTask;
 
 @Service
 @Scope("prototype")
-public class Client implements Runnable{
+public class Client implements Runnable {
 	public static final Logger log = LoggerFactory.getLogger(Client.class);
 
 	public SmppSessionConfiguration cfg;
@@ -49,21 +50,20 @@ public class Client implements Runnable{
 	protected volatile SmppSession session;
 	protected SmppClient smppClient;
 	protected ScheduledExecutorService timer;
-	
+
 	protected ScheduledFuture<?> elinkTask;
 	protected ScheduledFuture<?> rebindTask;
-	
+
 	protected long rebindPeriod = 5;
 	protected long elinkPeriod = 5;
-	
-	
+
 	private static void log(WindowFuture<Integer, PduRequest, PduResponse> future) {
 		SubmitSm req = (SubmitSm) future.getRequest();
 		SubmitSmResp resp = (SubmitSmResp) future.getResponse();
 
 		log.debug("Resposta recebida com MSG ID={} para APPID={}", resp.getMessageId(), req.getReferenceObject());
 	}
-	
+
 	@Override
 	public void run() {
 		System.out.println("Creating client");
@@ -71,10 +71,10 @@ public class Client implements Runnable{
 
 	public Client(SmppSessionConfiguration cfg) {
 		this.cfg = cfg;
-		
+
 		this.timer = Executors.newScheduledThreadPool(2);
 	}
-	
+
 	public void start() {
 		log.debug("Starting client");
 
@@ -82,7 +82,7 @@ public class Client implements Runnable{
 
 		this.bind();
 	}
-	
+
 	private SmppSessionConfiguration createSessionConfiguration(String host, int porta, String systemId,
 			String password) {
 		SmppSessionConfiguration sessionCfg = new SmppSessionConfiguration();
@@ -98,50 +98,57 @@ public class Client implements Runnable{
 	}
 
 	public SubmitSm sendSM(String host, int porta, String systemId, String password, String origem, String destino,
-			String msg, String dataCode) throws SmppInvalidArgumentException {
-		SubmitSm sm = new SubmitSm();
+			String msg, String dataCode) throws Exception {
 
-		sm.setSourceAddress(new Address((byte) 5, (byte) 0, origem));
-		sm.setDestAddress(new Address((byte) 1, (byte) 1, destino));
-		sm.setShortMessage(CharsetUtil.encode(msg, dataCode));
-		sm.setRegisteredDelivery((byte) 1);
-		sm.setDataCoding((byte) 8);
+		byte[] textoBytes = CharsetUtil.encode(msg, CharsetUtil.CHARSET_UTF_8);
 
-		try {
-			System.out.println(this.getSession());
-			this.getSession().submit(sm, TimeUnit.SECONDS.toMillis(60));
-		} catch (RecoverablePduException ex) {
-			java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-		} catch (UnrecoverablePduException ex) {
-			java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-		} catch (SmppTimeoutException ex) {
-			java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-		} catch (SmppChannelException ex) {
-			java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-		} catch (InterruptedException ex) {
-			java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+		int numMaximoPartesMensagem = 134;
+		byte[] bytesMensagemUnica = textoBytes;
+		byte[][] byteMensagensArray = splitUnicodeMessage(bytesMensagemUnica, numMaximoPartesMensagem);
+
+		for (int i = 0; i < byteMensagensArray.length; i++) {
+			SubmitSm sm = new SubmitSm();
+			sm.setSourceAddress(new Address((byte) 5, (byte) 0, origem));
+			sm.setDestAddress(new Address((byte) 1, (byte) 1, destino));
+			sm.setShortMessage(byteMensagensArray[i]);
+			sm.setRegisteredDelivery((byte) 1);
+			sm.setDataCoding((byte) 8);
+			try {
+				System.out.println(this.getSession());
+				this.getSession().submit(sm, TimeUnit.SECONDS.toMillis(60));
+			} catch (RecoverablePduException ex) {
+				java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+			} catch (UnrecoverablePduException ex) {
+				java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+			} catch (SmppTimeoutException ex) {
+				java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+			} catch (SmppChannelException ex) {
+				java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+			} catch (InterruptedException ex) {
+				java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+			}
+			try {
+				TimeUnit.SECONDS.sleep(3);
+			} catch (InterruptedException ex) {
+				java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+			}
+
 		}
-		try {
-			TimeUnit.SECONDS.sleep(3);
-		} catch (InterruptedException ex) {
-			java.util.logging.Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-		}
-
-		return sm;
+		return null;
 	}
 
-	public void bind()  {
+	public void bind() {
 		this.state = ClientState.BINDING;
 		System.out.println(this.getSession());
 		this.bound(this.session);
 		runRebindTask();
 	}
-	
+
 	public void bound(SmppSession session) {
 		this.state = ClientState.BOUND;
-		this.session = session;		
-		
-		if (rebindTask!=null) {
+		this.session = session;
+
+		if (rebindTask != null) {
 			this.rebindTask.cancel(true);
 		}
 		runElinkTask();
@@ -170,9 +177,84 @@ public class Client implements Runnable{
 		this.timer = null;
 	}
 
+	private static byte[][] splitUnicodeMessage(byte[] binaryShortMessage, Integer numMaximoPartesMensagem) {
+
+		if (binaryShortMessage == null) {
+			return null;
+		}
+
+		// se a mensagem nao precisar ser concatenada
+		if (binaryShortMessage.length <= 140) {
+			return null;
+		}
+
+		// Field 1 (1 octet): Length of User Data Header, in this case 05.
+		final byte UDHIE_HEADER_LENGTH = 0x05;
+        // Field 2 (1 octet): Information Element Identifier, equal to 00 (Concatenated short messages, 8-bit reference number)
+		final byte UDHIE_IDENTIFIER_SAR = 0x00;
+        // Field 3 (1 octet): Length of the header, excluding the first two fields; equal to 03
+		final byte UDHIE_SAR_LENGTH = 0x03;
+
+		// determine how many messages have to be sent
+		// since the UDH will be 6 bytes, we'll split the data into chunks of 134
+		int numberOfSegments = binaryShortMessage.length / numMaximoPartesMensagem;
+		int messageLength = binaryShortMessage.length;
+		if (numberOfSegments > 255) {
+			numberOfSegments = 255;
+			// last part (only need to add remainder)
+			messageLength = numberOfSegments * numMaximoPartesMensagem;
+		}
+		if ((messageLength % numMaximoPartesMensagem) > 0) {
+			numberOfSegments++;
+		}
+
+		// prepare array for all of the msg segments
+		byte[][] segments = new byte[numberOfSegments][];
+
+		int lengthOfData;
+
+		// generate new reference number
+		byte[] referenceNumber = new byte[1];
+		new Random().nextBytes(referenceNumber);
+
+		// split the message adding required headers
+		for (int i = 0; i < numberOfSegments; i++) {
+			if (numberOfSegments - i == 1) {
+				lengthOfData = messageLength - i * numMaximoPartesMensagem;
+			} else {
+				lengthOfData = numMaximoPartesMensagem;
+			}
+			// new array to store the header
+			// part will be UDH (6 bytes) + length of part
+			segments[i] = new byte[6 + lengthOfData];
+
+			// UDH header
+			// doesn't include itself, its header length
+			segments[i][0] = UDHIE_HEADER_LENGTH;
+			// SAR identifier
+			segments[i][1] = UDHIE_IDENTIFIER_SAR;
+			// SAR length
+			segments[i][2] = UDHIE_SAR_LENGTH;
+			// reference number (same for all messages)
+            // Field 4 (1 octet): 00-FF, CSMS reference number, must be same for all the SMS parts in the CSMS
+			segments[i][3] = referenceNumber[0];
+			// total number of segments
+            // Field 5 (1 octet): 00-FF, total number of parts. The value shall remain constant for every short message which makes up the concatenated short message. If the value is zero then the receiving entity shall ignore the whole information element
+			segments[i][4] = (byte) numberOfSegments;
+			// segment number
+            // Field 6 (1 octet): 00-FF, this part's number in the sequence. The value shall start at 1 and increment for every short message which makes up the concatenated short message. If the value is zero or greater than the value in Field 5 then the receiving entity shall ignore the whole information element. [ETSI Specification: GSM 03.40 Version 5.3.0: July 1996]
+			segments[i][5] = (byte) (i + 1);
+			
+			
+			// copy the data into the array
+            // copy this part's user data onto the end
+			System.arraycopy(binaryShortMessage, (i * numMaximoPartesMensagem), segments[i], 6, lengthOfData);
+		}
+		return segments;
+	}
+
 	private void runRebindTask() {
-		this.rebindTask = this.timer.scheduleAtFixedRate(new RebindTask(this), 0, getRebindPeriod(), 
-				TimeUnit.SECONDS);
+		this.rebindTask = this.timer.scheduleAtFixedRate(new RebindTask(this), 0, getRebindPeriod(), TimeUnit.SECONDS);
 	}
 
 	private void runElinkTask() {
