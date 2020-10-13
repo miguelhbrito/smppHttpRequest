@@ -24,7 +24,7 @@
 		<cloudhopper-version>5.0.9</cloudhopper-version>
 		<ch.commons.gsm.version>3.0.0</ch.commons.gsm.version>
 		<ch.commons.charset.version>3.0.0</ch.commons.charset.version>
-		<junit.version>4.11</junit.version>
+		<junit.version>4.13.1</junit.version>
 		<junit.version>4.11</junit.version>
 		<slf4j.version>1.7.5</slf4j.version>
 		<logback.version>1.0.13</logback.version>
